@@ -10,24 +10,28 @@
 <script type="text/javascript" src="icanhaz.js"></script>
 <script type="text/javascript" src="http://www.google.com/jsapi"></script> 
 <script type="text/javascript" src="http://maps.google.com/maps/api/js?sensor=false"></script>
-	<script id="story" type="text/html"> 
-		<article>
-			<h2><a href="{{url}}">{{title}}</a></h2>
-			<section class="content">
-				<p>{{summary}}</p>
-			</section>
-			<date>{{published}}</date>
-			<div class="buttons-container">
-				<button type="button" class="add" id="">add</button><a href="#queue" class="queue">queue</a>
-			</div>
-		</article>
-	</script>
-	<script id="queued" type="text/html"> 
+<!-- Mustache templates -->
+<script id="story" type="text/html"> 
+    <article>
+        <h2><a href="{{url}}">{{title}}</a></h2>
+        <section class="content">
+            <p>{{summary}}</p>
+        </section>
+        <date>{{published}}</date>
+        <div class="buttons-container">
+            <button type="button" class="add" id="">add</button><a href="#queue" class="queue">queue</a>
+        </div>
+    </article>
+</script>
+<script id="queued" type="text/html"> 
 	<li><a href="{{url}}">{{title}}</a><span class="delete"> delete</span></li>
 </script>
+<!-- end Mustache templates -->
 
 <script type="text/javascript"> 
-	var stored;
+
+var stored;
+
 function initialize() {
 	stored = JSON.parse(localStorage.getItem('stored'));
 
