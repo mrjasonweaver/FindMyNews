@@ -30,157 +30,213 @@
 
 <script type="text/javascript"> 
 
-var stored;
+var Locator = function() {
+    return {
+        getUserPosition: function(onSuccess) {
+            //get users location via HTML5 geolocation API
+            if (navigator.geolocation) {
+                var timeoutVal = 10 * 1000 * 1000;
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        onSuccess(position)
+                    },
+                    function() {
+                        alert("Geolocation failed.");
+                    }, 
+                    { 
+                        timeout: timeoutVal, 
+                        maximumAge: 0 
+                    }
+                );
+            } else {
+                alert("Geolocation is not supported by this browser");
+            }
+                 
+        },
+        getZipCode: function(position, onSuccess) {
+            var position = position.coords.latitude + "," + position.coords.longitude;
+            $.getJSON(
+                'proxy.php',
+                {
+                    path : "http://maps.google.com/maps/api/geocode/json?latlng="+position+"&sensor=false",
+                    type: "application/json"
+                }, 
+                function(json){
+                    onSuccess(json);
+                }
+            );
+                    
+        }
+    }
+}();
 
-function initialize() {
-	stored = JSON.parse(localStorage.getItem('stored'));
+var LocalStorageQueue = function($) {
+    var stored;
 
-	if (null == stored) {
-		stored = [];
-	}
-	$.each(stored, function(index, element) {
-		$('#queue ul').append(ich.queued({
-			url: element.url,
-			title: element.title
-		}));		
-	})	
-	
-	$('.delete').click(deleteItemFromQueue)
-	
-	
-	if (navigator.geolocation) {
-		var timeoutVal = 10 * 1000 * 1000;
-		navigator.geolocation.getCurrentPosition(
-			success, 
-			error, 
-			{ timeout: timeoutVal, 
-			maximumAge: 0 }
-		);
-	} else {
-		error("Geolocation is not supported by this browser");
-	}
+    var _write = function() {
+        localStorage.setItem('stored', JSON.stringify(stored)); 
+    };
 
-}
+    var _read = function() {
+        return JSON.parse(localStorage.getItem('stored')) || [];
+    };
 
-deleteItemFromQueue = function() {
-	$(this).parent().remove();
-	var stored_url = $(this).parent().find("a").attr("href");
-	$.each(stored, function(index, element) {
-		if (element.url === stored_url) {
-			stored.splice(index, 1);
-		}
-	});
-	localStorage.setItem('stored', JSON.stringify(stored));
-}
+    return {
+        load: function() {
+            stored = _read();
+            return stored;
+        },
+        add: function(key, story) {
+            var storyIsAlreadyQueued = false;
+            $.each(stored, function(i, element) {
+                if (element.url == story.url) {
+                    storyIsAlreadyQueued = true;
+                    return;
+                }
+            });
 
-var sign = function(url) {
-    var hm = 'fjts7x6va43ewxdyweasrexk' + '4tXDQSSeV6' + (Math.round(new Date().getTime() / 1000).toString());
-    var sig = $.md5(hm);
-    return url + "?dev_key=" + 'fjts7x6va43ewxdyweasrexk' + "&sig=" + sig;
-  }
+            if (!storyIsAlreadyQueued) {
+                stored.push(story);
+                _write();
+            }
+        },
+        remove: function(key) {
+            $.each(stored, function(i, element) {
+                if (element.url === key) {
+                    stored.splice(i, 1);
+                    _write();
+                } 
+            });
+        }
+    };
+}(jQuery);
 
-function getStories(zip) {
-	
-	$.getJSON(sign('http://news-api.patch.com/v1.1/zipcodes/' + zip + '/stories'), function(data) {
-	// Create an object containing LatLng, population.
-	$.each(data.stories, function(index, story) {
-		var markup = $(ich.story({ 
-			title: story.title,
-			summary: story.summary,
-			url: story.story_url,
-			published: story.published_at
-		}));
-		markup.find('.add').click(function(e) {
-			e.preventDefault();
-			var getter = $(this).parent().parent().find('h2 a');
-			article = {
-				url: getter.attr('href'),
-				title: getter.html()
-			};
-			stored.push(article);
-			$(this).fadeOut();
-			
-			localStorage.setItem('stored', JSON.stringify(stored));
-			
-			window.addEventListener("storage", displayStorageEvent, true);
-			$('#queue ul').append(ich.queued(article));			
-			$('.delete').click(deleteItemFromQueue);	
-						
-		});
- 		
-		$('#list').append(markup);
-		$('.loading').remove();		
-	});
-		
-	});
-}
 
-function displayStorageEvent(e) {
-	var queuesection = document.getElementById('queue');	
-	queuesection.innerHTML = e.newValue;
-}
+var StoryApi = function($) {
 
-var getZipCode = function(position){
-	var position = position.coords.latitude + "," + position.coords.longitude;
-	$.getJSON('proxy.php',{
-		path : "http://maps.google.com/maps/api/geocode/json?latlng="+position+"&sensor=false",
-		type: "application/json"
-	}, function(json){
-	//Find the zip code of the first result
-	if(!(json.status == "OK")){
-		GETZIP.error('Zip Code not Found');
-		return;
-	}
-	var found = false;
-	$(json.results[0].address_components).each(function(i, el){
-		if($.inArray("postal_code", el.types) > -1){
-			found = true;
-			$('#site-title').append('<span> ' + el.short_name + '</span>');
-			getStories(el.short_name);
-			return;
-		}
-	});
-	if(!found){
-	GETZIP.error('Zip Code not Found');
-	}
-	});
-}
+    var sign = function(url) {
+        var hm = 'fjts7x6va43ewxdyweasrexk' + '4tXDQSSeV6' + (Math.round(new Date().getTime() / 1000).toString());
+        var sig = $.md5(hm);
+        return url + "?dev_key=" + 'fjts7x6va43ewxdyweasrexk' + "&sig=" + sig;
+    }
 
-function success(position) {
-	getZipCode(position)
+    return {
+        getStoriesForZip: function(postalCode, onSuccess) {
+            $.getJSON(
+                sign('http://news-api.patch.com/v1.1/zipcodes/' + postalCode + '/stories'),
+                function(data) {
+                    onSuccess(data.stories);
+                }
+            );
+        }
+    };
+}(jQuery);
 
-	var mapcanvas = document.createElement('div');
-	mapcanvas.id = 'mapcanvas';
-	mapcanvas.style.height = '200px';
-	mapcanvas.style.width = '100%';
- 
-	document.getElementById('header').appendChild(mapcanvas);
+var FindMyNews = function($, StorageQueue, StorySource, Location) {
+    var stored;
 
-	var latlng = new google.maps.LatLng(position.coords.latitude, position.coords.longitude);
-	var myOptions = {
-	 zoom: 15,
-	 center: latlng,
-	 mapTypeControl: false,
-	 navigationControlOptions: {style: google.maps.NavigationControlStyle.SMALL},
-	 mapTypeId: google.maps.MapTypeId.ROADMAP
-	};
-	var map = new google.maps.Map(document.getElementById("mapcanvas"), myOptions);
+    return {
+        run: function() {
+            console.log('-- FindMyNews.run() --');
 
-	var marker = new google.maps.Marker({
-	   position: latlng, 
-	   map: map, 
-	   title:"You are here! (at least within a "+position.coords.accuracy+" meter radius)"
-	});
-}
+            var queuedStories = StorageQueue.load();
+            $.each(queuedStories, function(index, element) {
+                $('#queue ul').append(ich.queued(element));		
+            })	
 
-function error(msg) {
-	alert('There was an error finding your location ');
-}
-			
+            //attach deferred click event handler to queue remove button
+            $("#queue").on("click", "span.delete", function(e) {
+                e.preventDefault();        
+                console.log('-- triggered remove for queued story');
+                var queuedItemKey = $(this).parent().find("a").attr("href");
+                StorageQueue.remove(queuedItemKey);
+                $(this).parent().remove();
+            });
+
+            //attach deferred click event handler to #list 'button.add'
+            $('#list').on("click", 'button.add', function(e) {
+                e.preventDefault();
+                console.log('-- triggered add to queue');
+                var getter = $(this).parent().parent().find('h2 a');
+                var article = {
+                    url: getter.attr('href'),
+                    title: getter.html()
+                };
+                StorageQueue.add(getter.attr('href'), article);
+
+                $(this).fadeOut();
+
+                $('#queue ul').append(ich.queued(article));
+            });
+
+            Location.getUserPosition(function(position) {
+                Location.getZipCode(position, function(json) {
+                    //Find the zip code of the first result
+                    if(!(json.status == "OK")){
+                        alert('Zip Code not Found');
+                        return;
+                    }
+                    var found = false;
+                    $(json.results[0].address_components).each(function(i, el){
+                        if($.inArray("postal_code", el.types) > -1){
+                            found = true;
+                            $('#site-title').append('<span> ' + el.short_name + '</span>');
+                            StorySource.getStoriesForZip(el.short_name, function(stories) {
+                                $.each(stories, function(index, story) {
+                                    var markup = $(ich.story({ 
+                                        title: story.title,
+                                        summary: story.summary,
+                                        url: story.story_url,
+                                        published: story.published_at
+                                    }));
+                                    
+                                    $('#list').append(markup);
+                                    $('.loading').remove();		
+                                });
+                            });
+                            return;
+                        }
+                    });
+
+                    if(!found){
+                        alert('Zip Code not Found');
+                    }
+                });
+
+                var mapcanvas = document.createElement('div');
+                mapcanvas.id = 'mapcanvas';
+                mapcanvas.style.height = '200px';
+                mapcanvas.style.width = '100%';
+            
+                document.getElementById('header').appendChild(mapcanvas);
+
+                var latlng = new google.maps.LatLng(position.coords.latitude, position.coords.longitude);
+                var myOptions = {
+                    zoom: 15,
+                    center: latlng,
+                    mapTypeControl: false,
+                    navigationControlOptions: {style: google.maps.NavigationControlStyle.SMALL},
+                    mapTypeId: google.maps.MapTypeId.ROADMAP
+                };
+                var map = new google.maps.Map(document.getElementById("mapcanvas"), myOptions);
+
+                var marker = new google.maps.Marker({
+                    position: latlng, 
+                    map: map, 
+                    title:"You are here! (at least within a "+position.coords.accuracy+" meter radius)"
+                });
+            });
+        }
+    };
+}(jQuery, LocalStorageQueue, StoryApi, Locator);
+
+$(function() {
+    FindMyNews.run();
+});
 </script> 
 
 </head> 
-<body onload="initialize()">
+<body>
 <div class="wrap">
 	<header id="header">
 		<h1 id="site-title">Find and save local news stories near</h1>
