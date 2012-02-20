@@ -1,12 +1,12 @@
 <?php
-$path = ($_POST['path']) ? $_POST['path'] : $_GET['path'];
+$path = (isset($_POST['path'])) ? $_POST['path'] : $_GET['path'];
 $url = $path;
  
 // Open the Curl session
 $session = curl_init($url);
  
 // If it's a POST, put the POST data in the body
-if ($_POST['path']) {
+if (isset($_POST['path'])) {
 	$postvars = '';
 	while ($element = current($_POST)) {
 		$postvars .= urlencode(key($_POST)).'='.urlencode($element).'&';
@@ -24,7 +24,7 @@ curl_setopt($session, CURLOPT_RETURNTRANSFER, true);
 $xml = curl_exec($session);
  
 // does the service return XML or JSON? Set the Content-Type appropriately
-$headerType = ($_POST['type']) ? $_POST['type'] : $_GET['type'];
+$headerType = (isset($_POST['type'])) ? $_POST['type'] : $_GET['type'];
 // 'text/xml' or 'application/json'
 $headerType = ($headerType) ? $headerType : 'text/xml';//default
 header("Content-Type: " . $headerType);
